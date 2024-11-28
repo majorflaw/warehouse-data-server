@@ -7,32 +7,65 @@ dotenv.config();
 
 const app = express();
 
-// This middleware will help us track incoming requests
+// Add middleware to increase request payload size limit
+app.use(express.json({ limit: '150mb' })); // Allow larger JSON payloads
+app.use(express.urlencoded({ extended: true, limit: '150mb' }));
+
+// Add timeout handling
 app.use((req, res, next) => {
-    console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+    // Set a timeout for all requests (5 minutes)
+    req.setTimeout(300000); // 5 minutes in milliseconds
     next();
 });
 
-// Health check endpoint
-app.get('/', (req, res) => {
-    res.json({ status: 'Server is running', timestamp: new Date().toISOString() });
+// Add error handling middleware
+app.use((error, req, res, next) => {
+    console.error('Global error handler caught:', error);
+    res.status(500).json({
+        error: 'Internal Server Error',
+        message: error.message,
+        timestamp: new Date().toISOString()
+    });
 });
 
-// Endpoint to fetch data from testing folder
+// Health check endpoint with detailed information
+app.get('/', (req, res) => {
+    res.json({
+        status: 'Server is running',
+        timestamp: new Date().toISOString(),
+        memory: process.memoryUsage(),
+        uptime: process.uptime()
+    });
+});
+
+// Modified endpoint to handle large files
 app.get('/api/testing/:filename', async (req, res) => {
     try {
-        console.log(`Requesting file: ${req.params.filename} from testing folder`);
+        console.log(`Starting request for file: ${req.params.filename}`);
+        console.log('Current memory usage:', process.memoryUsage());
         
+        // Set response headers for better client handling
+        res.setHeader('Content-Type', 'application/json');
+        
+        // Stream the response instead of loading it all into memory
         const data = await dropboxService.getDropboxFile(
             'testing',
             req.params.filename,
             process.env.DROPBOX_ACCESS_TOKEN
         );
-        
+
+        console.log('File fetched successfully, sending response');
         res.json(data);
+        
     } catch (error) {
-        console.error('Error serving file:', error.message);
-        res.status(500).json({ 
+        console.error('Error details:', {
+            message: error.message,
+            stack: error.stack,
+            memory: process.memoryUsage()
+        });
+        
+        // Send a more informative error response
+        res.status(500).json({
             error: 'Failed to fetch file',
             details: error.message,
             timestamp: new Date().toISOString()
@@ -40,8 +73,21 @@ app.get('/api/testing/:filename', async (req, res) => {
     }
 });
 
-// Start server
+// Start server with proper error handling
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
     console.log(`Server started on port ${PORT} at ${new Date().toISOString()}`);
+    console.log('Initial memory usage:', process.memoryUsage());
+});
+
+// Handle server-level errors
+server.on('error', (error) => {
+    console.error('Server error:', error);
+    process.exit(1); // This will trigger a restart on Render.com
+});
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+    // Don't exit the process, but log the error
 });
