@@ -1,21 +1,25 @@
 const axios = require('axios');
 const NodeCache = require('node-cache');
+const tokenManager = require('./tokenManager'); // Add this line
 
 class DropboxService {
     constructor() {
         this.cache = new NodeCache({
-            stdTTL: 480, // 8 minutes
-            checkperiod: 60, // Check for expired keys every minute
-            useClones: false // Don't clone objects to save memory
+            stdTTL: 480,
+            checkperiod: 60,
+            useClones: false
         });
         this.lastModified = {};
     }
 
     async getDropboxFile(folderName, fileName, accessToken) {
-        // Store the path at the beginning of the function so it's available throughout
         const path = this.formatDropboxPath(folderName, fileName);
         
         try {
+            // First, get a valid access token using our token manager
+            const validToken = await tokenManager.getValidAccessToken();
+            console.log('Retrieved valid access token');
+
             console.log('Fetching file:', path);
 
             const cacheKey = `file_${path}`;
@@ -30,33 +34,33 @@ class DropboxService {
                 method: 'post',
                 url: 'https://content.dropboxapi.com/2/files/download',
                 headers: {
-                    'Authorization': `Bearer ${accessToken}`,
+                    'Authorization': `Bearer ${validToken}`, // Use the new valid token
                     'Dropbox-API-Arg': JSON.stringify({
                         path: path
                     }),
                     'Content-Type': ''
                 },
-                timeout: 300000, // 5 minutes
+                timeout: 300000,
                 maxContentLength: Infinity,
                 maxBodyLength: Infinity,
                 responseType: 'json'
             });
 
-            console.log('File downloaded, size:', 
-                response.data ? JSON.stringify(response.data).length : 'unknown');
+            console.log('File downloaded successfully');
             
             this.cache.set(cacheKey, response.data);
             return response.data;
 
         } catch (error) {
-            // Now path is available here because we defined it outside the try block
+            // Enhanced error logging with token status
             console.error('Detailed error information:', {
                 message: error.message,
                 status: error.response?.status,
                 statusText: error.response?.statusText,
                 data: error.response?.data,
-                attemptedPath: path, // Using a different name to be clear
-                memoryUsage: process.memoryUsage()
+                attemptedPath: path,
+                memoryUsage: process.memoryUsage(),
+                hasRefreshToken: !!tokenManager.refreshToken // Log if we have a refresh token
             });
             
             throw error;

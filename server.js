@@ -2,6 +2,9 @@ const express = require('express');
 const dotenv = require('dotenv');
 const dropboxService = require('./src/services/dropboxService');
 const cors = require('cors'); // Add this line
+const passport = require('passport');
+const session = require('express-session');
+const DropboxStrategy = require('passport-dropbox-oauth2').Strategy;
 
 // Load environment variables
 dotenv.config();
@@ -38,6 +41,34 @@ app.use((error, req, res, next) => {
         timestamp: new Date().toISOString()
     });
 });
+
+// Session configuration
+app.use(session({
+    secret: process.env.SESSION_SECRET,
+    resave: false,
+    saveUninitialized: false
+}));
+
+// Initialize Passport
+app.use(passport.initialize());
+app.use(passport.session());
+
+// Set up Passport strategy
+passport.use(new DropboxStrategy({
+    apiVersion: '2',
+    clientID: process.env.DROPBOX_APP_KEY,
+    clientSecret: process.env.DROPBOX_APP_SECRET,
+    callbackURL: 'https://warehouse-data-server.onrender.com/auth/callback'
+}, (accessToken, refreshToken, profile, done) => {
+    // Log tokens so we can grab them
+    console.log('=== IMPORTANT: ADD THESE TOKENS TO YOUR ENVIRONMENT VARIABLES ===');
+    console.log('Access Token:', accessToken);
+    console.log('Refresh Token:', refreshToken);
+    return done(null, profile);
+}));
+
+passport.serializeUser((user, done) => done(null, user));
+passport.deserializeUser((obj, done) => done(null, obj));
 
 // Health check endpoint with detailed information
 app.get('/', (req, res) => {
@@ -118,6 +149,16 @@ app.get('/api/testing-cvg/:filename', async (req, res) => {
         });
     }
 });
+
+// Authentication routes
+app.get('/auth/dropbox', passport.authenticate('dropbox-oauth2'));
+
+app.get('/auth/callback', 
+    passport.authenticate('dropbox-oauth2', { failureRedirect: '/login' }),
+    (req, res) => {
+        res.send('Authentication successful! Check server logs for tokens.');
+    }
+);
 
 // Start server with proper error handling
 const PORT = process.env.PORT || 3000;
