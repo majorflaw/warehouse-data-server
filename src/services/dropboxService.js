@@ -12,8 +12,10 @@ class DropboxService {
     }
 
     async getDropboxFile(folderName, fileName, accessToken) {
+        // Store the path at the beginning of the function so it's available throughout
+        const path = this.formatDropboxPath(folderName, fileName);
+        
         try {
-            const path = this.formatDropboxPath(folderName, fileName);
             console.log('Fetching file:', path);
 
             const cacheKey = `file_${path}`;
@@ -24,7 +26,6 @@ class DropboxService {
 
             console.log('Making request to Dropbox API...');
             
-            // Configure axios for large files
             const response = await axios({
                 method: 'post',
                 url: 'https://content.dropboxapi.com/2/files/download',
@@ -35,7 +36,6 @@ class DropboxService {
                     }),
                     'Content-Type': ''
                 },
-                // Add timeout and size handling
                 timeout: 300000, // 5 minutes
                 maxContentLength: Infinity,
                 maxBodyLength: Infinity,
@@ -49,12 +49,13 @@ class DropboxService {
             return response.data;
 
         } catch (error) {
+            // Now path is available here because we defined it outside the try block
             console.error('Detailed error information:', {
                 message: error.message,
                 status: error.response?.status,
                 statusText: error.response?.statusText,
                 data: error.response?.data,
-                path: path,
+                attemptedPath: path, // Using a different name to be clear
                 memoryUsage: process.memoryUsage()
             });
             
