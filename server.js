@@ -60,7 +60,8 @@ passport.use(new DropboxStrategy({
     apiVersion: '2',
     clientID: process.env.DROPBOX_APP_KEY,
     clientSecret: process.env.DROPBOX_APP_SECRET,
-    callbackURL: 'https://warehouse-data-server.onrender.com/auth/callback'
+    callbackURL: 'https://warehouse-data-server.onrender.com/auth/callback',
+    tokenAccessType: 'offline'  // This requests a refresh token
 }, (accessToken, refreshToken, profile, done) => {
     console.log('=== IMPORTANT: ADD THESE TOKENS TO YOUR ENVIRONMENT VARIABLES ===');
     console.log('Access Token:', accessToken);
@@ -118,7 +119,8 @@ passport.use(new DropboxStrategy({
     apiVersion: '2',
     clientID: process.env.DROPBOX_APP_KEY,
     clientSecret: process.env.DROPBOX_APP_SECRET,
-    callbackURL: 'https://warehouse-data-server.onrender.com/auth/callback'
+    callbackURL: 'https://warehouse-data-server.onrender.com/auth/callback',
+    tokenAccessType: 'offline'  // This requests a refresh token
 }, (accessToken, refreshToken, profile, done) => {
     // Log tokens so we can grab them
     console.log('=== IMPORTANT: ADD THESE TOKENS TO YOUR ENVIRONMENT VARIABLES ===');
