@@ -1,11 +1,22 @@
 const express = require('express');
 const dotenv = require('dotenv');
 const dropboxService = require('./src/services/dropboxService');
+const cors = require('cors'); // Add this line
 
 // Load environment variables
 dotenv.config();
 
 const app = express();
+
+// Add CORS middleware before other middleware
+app.use(cors({
+    origin: [
+        'http://localhost:3000',
+        'https://majorflaw.github.io'
+    ],
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
 
 // Add middleware to increase request payload size limit
 app.use(express.json({ limit: '150mb' })); // Allow larger JSON payloads
