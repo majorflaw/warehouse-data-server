@@ -3,52 +3,69 @@ const NodeCache = require('node-cache');
 
 class DropboxService {
     constructor() {
-        // Cache files for 8 minutes (slightly less than the 10-minute update interval)
         this.cache = new NodeCache({ stdTTL: 480 });
-        
-        // Store last modified times to check for updates
         this.lastModified = {};
     }
 
     async getDropboxFile(path, accessToken) {
         try {
-            // First, get metadata to check if file has changed
-            const metadata = await this.getFileMetadata(path, accessToken);
-            const cacheKey = `file_${path}`;
-            
-            // If we have a cached version and file hasn't changed, return cached version
+            // Add logging to see what path we're trying to access
+            console.log('Attempting to access file at path:', path);
+
+            // Ensure path starts with '/'
+            const formattedPath = path.startsWith('/') ? path : `/${path}`;
+            console.log('Formatted path:', formattedPath);
+
+            const metadata = await this.getFileMetadata(formattedPath, accessToken);
+            console.log('File metadata:', metadata);
+
+            const cacheKey = `file_${formattedPath}`;
+
             if (this.cache.has(cacheKey) && 
-                this.lastModified[path] === metadata.server_modified) {
-                console.log(`Serving cached version of ${path}`);
+                this.lastModified[formattedPath] === metadata.server_modified) {
+                console.log(`Serving cached version of ${formattedPath}`);
                 return this.cache.get(cacheKey);
             }
 
-            // File has changed or isn't cached, download it
-            console.log(`Downloading ${path} from Dropbox`);
+            console.log(`Downloading ${formattedPath} from Dropbox`);
+            
+            // Log the request details (but not the token)
+            console.log('Making request with headers:', {
+                'Dropbox-API-Arg': JSON.stringify({
+                    path: formattedPath
+                })
+            });
+
             const response = await axios({
                 method: 'post',
                 url: 'https://content.dropboxapi.com/2/files/download',
                 headers: {
                     'Authorization': `Bearer ${accessToken}`,
                     'Dropbox-API-Arg': JSON.stringify({
-                        path: path
+                        path: formattedPath
                     })
                 }
             });
 
-            // Update cache and last modified time
-            this.lastModified[path] = metadata.server_modified;
+            this.lastModified[formattedPath] = metadata.server_modified;
             this.cache.set(cacheKey, response.data);
             
             return response.data;
         } catch (error) {
-            console.error('Error fetching file from Dropbox:', error.message);
+            // Enhanced error logging
+            console.error('Detailed error information:');
+            console.error('Status:', error.response?.status);
+            console.error('Status Text:', error.response?.statusText);
+            console.error('Error Data:', error.response?.data);
+            console.error('Path attempted:', path);
             throw error;
         }
     }
 
     async getFileMetadata(path, accessToken) {
         try {
+            console.log('Getting metadata for path:', path);
+            
             const response = await axios({
                 method: 'post',
                 url: 'https://api.dropboxapi.com/2/files/get_metadata',
@@ -62,7 +79,10 @@ class DropboxService {
             });
             return response.data;
         } catch (error) {
-            console.error('Error getting file metadata:', error.message);
+            console.error('Metadata error details:');
+            console.error('Status:', error.response?.status);
+            console.error('Status Text:', error.response?.statusText);
+            console.error('Error Data:', error.response?.data);
             throw error;
         }
     }
