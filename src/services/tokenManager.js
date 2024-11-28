@@ -3,10 +3,23 @@ const qs = require('querystring');
 
 class TokenManager {
     constructor() {
+        console.log('Environment variables available:', {
+            DROPBOX_ACCESS_TOKEN: process.env.DROPBOX_ACCESS_TOKEN ? 'present' : 'missing',
+            DROPBOX_REFRESH_TOKEN: process.env.DROPBOX_REFRESH_TOKEN ? 'present' : 'missing',
+            DROPBOX_APP_KEY: process.env.DROPBOX_APP_KEY ? 'present' : 'missing',
+            DROPBOX_APP_SECRET: process.env.DROPBOX_APP_SECRET ? 'present' : 'missing'
+        });
+        
         // Initialize with tokens from environment variables
         this.accessToken = process.env.DROPBOX_ACCESS_TOKEN;
         this.refreshToken = process.env.DROPBOX_REFRESH_TOKEN;
         this.tokenExpiry = null;
+
+        if (!this.refreshToken) {
+            console.error('Refresh token is missing or undefined in constructor');
+        } else {
+            console.log('Refresh token is present in constructor');
+        }
     }
 
     async getValidAccessToken() {
