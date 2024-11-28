@@ -9,6 +9,24 @@ const DropboxStrategy = require('passport-dropbox-oauth2').Strategy;
 // Load environment variables
 dotenv.config();
 
+// Create a function to validate our required environment variables
+function validateEnvironmentVariables() {
+    const requiredVars = [
+        'DROPBOX_APP_KEY',
+        'DROPBOX_APP_SECRET',
+        'SESSION_SECRET'
+    ];
+
+    const missing = requiredVars.filter(varName => !process.env[varName]);
+    
+    if (missing.length > 0) {
+        throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
+    }
+}
+
+// Validate environment variables before starting the server
+validateEnvironmentVariables();
+
 const app = express();
 
 // Add CORS middleware before other middleware
@@ -21,6 +39,48 @@ app.use(cors({
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
+// Configure session middleware with explicit secret
+app.use(session({
+    secret: process.env.SESSION_SECRET,
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+        secure: process.env.NODE_ENV === 'production', // Use secure cookies in production
+        httpOnly: true,
+        maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    }
+}));
+
+// Initialize Passport after session middleware
+app.use(passport.initialize());
+app.use(passport.session());
+
+// Configure Passport strategy
+passport.use(new DropboxStrategy({
+    apiVersion: '2',
+    clientID: process.env.DROPBOX_APP_KEY,
+    clientSecret: process.env.DROPBOX_APP_SECRET,
+    callbackURL: 'https://warehouse-data-server.onrender.com/auth/callback'
+}, (accessToken, refreshToken, profile, done) => {
+    console.log('=== IMPORTANT: ADD THESE TOKENS TO YOUR ENVIRONMENT VARIABLES ===');
+    console.log('Access Token:', accessToken);
+    console.log('Refresh Token:', refreshToken);
+    console.log('=== END TOKENS ===');
+    return done(null, profile);
+}));
+
+passport.serializeUser((user, done) => done(null, user));
+passport.deserializeUser((obj, done) => done(null, obj));
+
+// Add authentication routes
+app.get('/auth/dropbox', passport.authenticate('dropbox-oauth2'));
+
+app.get('/auth/callback', 
+    passport.authenticate('dropbox-oauth2', { failureRedirect: '/login' }),
+    (req, res) => {
+        res.send('Authentication successful! Check server logs for tokens.');
+    }
+);
 // Add middleware to increase request payload size limit
 app.use(express.json({ limit: '150mb' })); // Allow larger JSON payloads
 app.use(express.urlencoded({ extended: true, limit: '150mb' }));
@@ -149,16 +209,6 @@ app.get('/api/testing-cvg/:filename', async (req, res) => {
         });
     }
 });
-
-// Authentication routes
-app.get('/auth/dropbox', passport.authenticate('dropbox-oauth2'));
-
-app.get('/auth/callback', 
-    passport.authenticate('dropbox-oauth2', { failureRedirect: '/login' }),
-    (req, res) => {
-        res.send('Authentication successful! Check server logs for tokens.');
-    }
-);
 
 // Start server with proper error handling
 const PORT = process.env.PORT || 3000;
