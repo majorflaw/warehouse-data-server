@@ -84,6 +84,41 @@ app.get('/api/testing/:filename', async (req, res) => {
     }
 });
 
+// Modified endpoint to handle large files from testing_cvg folder
+app.get('/api/testing-cvg/:filename', async (req, res) => {
+    try {
+        console.log(`Starting request for CVG file: ${req.params.filename}`);
+        console.log('Current memory usage:', process.memoryUsage());
+        
+        // Set response headers for better client handling
+        res.setHeader('Content-Type', 'application/json');
+        
+        // Stream the response instead of loading it all into memory
+        const data = await dropboxService.getDropboxFile(
+            'testing_cvg',  // Note the different folder name here
+            req.params.filename,
+            process.env.DROPBOX_ACCESS_TOKEN
+        );
+
+        console.log('CVG file fetched successfully, sending response');
+        res.json(data);
+        
+    } catch (error) {
+        console.error('Error details:', {
+            message: error.message,
+            stack: error.stack,
+            memory: process.memoryUsage()
+        });
+        
+        // Send a more informative error response
+        res.status(500).json({
+            error: 'Failed to fetch CVG file',
+            details: error.message,
+            timestamp: new Date().toISOString()
+        });
+    }
+});
+
 // Start server with proper error handling
 const PORT = process.env.PORT || 3000;
 const server = app.listen(PORT, () => {
