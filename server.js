@@ -31,12 +31,10 @@ const app = express();
 
 // Add CORS middleware before other middleware
 app.use(cors({
-    origin: [
-        'http://localhost:3000',
-        'https://majorflaw.github.io'
-    ],
+    origin: true, // Allow all origins during development
     methods: ['GET', 'POST', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true // Required for cookies/sessions
 }));
 
 // Configure session middleware with explicit secret
