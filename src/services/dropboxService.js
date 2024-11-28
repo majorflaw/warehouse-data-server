@@ -9,57 +9,81 @@ class DropboxService {
 
     async getDropboxFile(path, accessToken) {
         try {
-            // Add logging to see what path we're trying to access
-            console.log('Attempting to access file at path:', path);
+            // Clean up the path to ensure proper format
+            const cleanPath = this.formatPath(path);
+            console.log('Attempting to access Dropbox file with path:', cleanPath);
 
-            // Ensure path starts with '/'
-            const formattedPath = path.startsWith('/') ? path : `/${path}`;
-            console.log('Formatted path:', formattedPath);
+            // First verify the token is valid
+            await this.verifyToken(accessToken);
+            console.log('Access token verified successfully');
 
-            const metadata = await this.getFileMetadata(formattedPath, accessToken);
-            console.log('File metadata:', metadata);
+            // Get file metadata first to confirm file exists
+            const metadata = await this.getFileMetadata(cleanPath, accessToken);
+            console.log('File found! Metadata:', JSON.stringify(metadata, null, 2));
 
-            const cacheKey = `file_${formattedPath}`;
+            const cacheKey = `file_${cleanPath}`;
 
+            // Check cache
             if (this.cache.has(cacheKey) && 
-                this.lastModified[formattedPath] === metadata.server_modified) {
-                console.log(`Serving cached version of ${formattedPath}`);
+                this.lastModified[cleanPath] === metadata.server_modified) {
+                console.log('Returning cached version of file');
                 return this.cache.get(cacheKey);
             }
 
-            console.log(`Downloading ${formattedPath} from Dropbox`);
-            
-            // Log the request details (but not the token)
-            console.log('Making request with headers:', {
-                'Dropbox-API-Arg': JSON.stringify({
-                    path: formattedPath
-                })
-            });
-
+            console.log('Downloading fresh copy of file from Dropbox');
             const response = await axios({
                 method: 'post',
                 url: 'https://content.dropboxapi.com/2/files/download',
                 headers: {
                     'Authorization': `Bearer ${accessToken}`,
                     'Dropbox-API-Arg': JSON.stringify({
-                        path: formattedPath
+                        path: cleanPath
                     })
                 }
             });
 
-            this.lastModified[formattedPath] = metadata.server_modified;
+            console.log('File downloaded successfully');
+            this.lastModified[cleanPath] = metadata.server_modified;
             this.cache.set(cacheKey, response.data);
             
             return response.data;
         } catch (error) {
-            // Enhanced error logging
-            console.error('Detailed error information:');
+            console.error('Error in getDropboxFile:');
             console.error('Status:', error.response?.status);
-            console.error('Status Text:', error.response?.statusText);
-            console.error('Error Data:', error.response?.data);
-            console.error('Path attempted:', path);
-            throw error;
+            console.error('Error message:', error.response?.data?.error_summary || error.message);
+            console.error('Full error data:', JSON.stringify(error.response?.data, null, 2));
+            throw new Error(`Failed to fetch Dropbox file: ${error.message}`);
         }
+    }
+
+    // New method to verify token
+    async verifyToken(accessToken) {
+        try {
+            await axios({
+                method: 'post',
+                url: 'https://api.dropboxapi.com/2/check/user',
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`,
+                    'Content-Type': 'application/json'
+                },
+                data: {}
+            });
+        } catch (error) {
+            throw new Error('Invalid or expired access token');
+        }
+    }
+
+    // New method to format paths correctly
+    formatPath(path) {
+        // Remove any Dropbox sharing URL components
+        if (path.includes('dropbox.com')) {
+            // Extract just the filename from the URL
+            path = path.split('/').pop().split('?')[0];
+        }
+        
+        // Ensure path starts with / and doesn't have double slashes
+        path = path.startsWith('/') ? path : `/${path}`;
+        return path.replace(/\/+/g, '/');
     }
 
     async getFileMetadata(path, accessToken) {
@@ -79,10 +103,9 @@ class DropboxService {
             });
             return response.data;
         } catch (error) {
-            console.error('Metadata error details:');
+            console.error('Metadata error:');
             console.error('Status:', error.response?.status);
-            console.error('Status Text:', error.response?.statusText);
-            console.error('Error Data:', error.response?.data);
+            console.error('Error details:', error.response?.data?.error_summary);
             throw error;
         }
     }
