@@ -5,46 +5,43 @@ const dropboxService = require('./src/services/dropboxService');
 // Load environment variables
 dotenv.config();
 
-// Initialize express app
 const app = express();
 
-// Basic health check endpoint
+// This middleware will help us track incoming requests
+app.use((req, res, next) => {
+    console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+    next();
+});
+
+// Health check endpoint
 app.get('/', (req, res) => {
-    res.json({ status: 'Server is running!' });
+    res.json({ status: 'Server is running', timestamp: new Date().toISOString() });
 });
 
 // Endpoint to fetch data from testing folder
 app.get('/api/testing/:filename', async (req, res) => {
     try {
-        const path = `/testing/${req.params.filename}`;
+        console.log(`Requesting file: ${req.params.filename} from testing folder`);
+        
         const data = await dropboxService.getDropboxFile(
-            path,
+            'testing',
+            req.params.filename,
             process.env.DROPBOX_ACCESS_TOKEN
         );
+        
         res.json(data);
     } catch (error) {
-        console.error('Error:', error.message);
-        res.status(500).json({ error: 'Failed to fetch file' });
-    }
-});
-
-// Endpoint to fetch data from testing_cvg folder
-app.get('/api/testing-cvg/:filename', async (req, res) => {
-    try {
-        const path = `/testing_cvg/${req.params.filename}`;
-        const data = await dropboxService.getDropboxFile(
-            path,
-            process.env.DROPBOX_ACCESS_TOKEN
-        );
-        res.json(data);
-    } catch (error) {
-        console.error('Error:', error.message);
-        res.status(500).json({ error: 'Failed to fetch file' });
+        console.error('Error serving file:', error.message);
+        res.status(500).json({ 
+            error: 'Failed to fetch file',
+            details: error.message,
+            timestamp: new Date().toISOString()
+        });
     }
 });
 
 // Start server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+    console.log(`Server started on port ${PORT} at ${new Date().toISOString()}`);
 });

@@ -3,110 +3,65 @@ const NodeCache = require('node-cache');
 
 class DropboxService {
     constructor() {
+        // Cache lasts for 8 minutes, just under the 10-minute update interval you mentioned
         this.cache = new NodeCache({ stdTTL: 480 });
         this.lastModified = {};
     }
 
-    async getDropboxFile(path, accessToken) {
+    // This method helps us construct the correct Dropbox path
+    formatDropboxPath(folderName, fileName) {
+        // We ensure the path is properly formatted with a leading slash
+        // and no double slashes
+        const path = `/${folderName}/${fileName}`.replace(/\/+/g, '/');
+        console.log('Constructed Dropbox path:', path);
+        return path;
+    }
+
+    async getDropboxFile(folderName, fileName, accessToken) {
         try {
-            // Clean up the path to ensure proper format
-            const cleanPath = this.formatPath(path);
-            console.log('Attempting to access Dropbox file with path:', cleanPath);
+            // First, let's construct the proper path
+            const path = this.formatDropboxPath(folderName, fileName);
+            console.log('Attempting to fetch file:', path);
 
-            // First verify the token is valid
-            await this.verifyToken(accessToken);
-            console.log('Access token verified successfully');
+            // Generate a unique cache key for this file
+            const cacheKey = `file_${path}`;
 
-            // Get file metadata first to confirm file exists
-            const metadata = await this.getFileMetadata(cleanPath, accessToken);
-            console.log('File found! Metadata:', JSON.stringify(metadata, null, 2));
-
-            const cacheKey = `file_${cleanPath}`;
-
-            // Check cache
-            if (this.cache.has(cacheKey) && 
-                this.lastModified[cleanPath] === metadata.server_modified) {
-                console.log('Returning cached version of file');
+            // Before making any API calls, let's check if we have a valid cached version
+            if (this.cache.has(cacheKey)) {
+                console.log('Found file in cache');
                 return this.cache.get(cacheKey);
             }
 
-            console.log('Downloading fresh copy of file from Dropbox');
+            console.log('Making request to Dropbox API...');
             const response = await axios({
                 method: 'post',
                 url: 'https://content.dropboxapi.com/2/files/download',
                 headers: {
                     'Authorization': `Bearer ${accessToken}`,
                     'Dropbox-API-Arg': JSON.stringify({
-                        path: cleanPath
+                        path: path
                     })
                 }
             });
 
-            console.log('File downloaded successfully');
-            this.lastModified[cleanPath] = metadata.server_modified;
+            // If we get here, the request was successful
+            console.log('Successfully downloaded file from Dropbox');
+            
+            // Store in cache for future requests
             this.cache.set(cacheKey, response.data);
             
             return response.data;
-        } catch (error) {
-            console.error('Error in getDropboxFile:');
-            console.error('Status:', error.response?.status);
-            console.error('Error message:', error.response?.data?.error_summary || error.message);
-            console.error('Full error data:', JSON.stringify(error.response?.data, null, 2));
-            throw new Error(`Failed to fetch Dropbox file: ${error.message}`);
-        }
-    }
 
-    // New method to verify token
-    async verifyToken(accessToken) {
-        try {
-            await axios({
-                method: 'post',
-                url: 'https://api.dropboxapi.com/2/check/user',
-                headers: {
-                    'Authorization': `Bearer ${accessToken}`,
-                    'Content-Type': 'application/json'
-                },
-                data: {}
+        } catch (error) {
+            // Provide detailed error information to help with debugging
+            console.error('Error details:', {
+                status: error.response?.status,
+                statusText: error.response?.statusText,
+                data: error.response?.data,
+                path: `${folderName}/${fileName}`
             });
-        } catch (error) {
-            throw new Error('Invalid or expired access token');
-        }
-    }
-
-    // New method to format paths correctly
-    formatPath(path) {
-        // Remove any Dropbox sharing URL components
-        if (path.includes('dropbox.com')) {
-            // Extract just the filename from the URL
-            path = path.split('/').pop().split('?')[0];
-        }
-        
-        // Ensure path starts with / and doesn't have double slashes
-        path = path.startsWith('/') ? path : `/${path}`;
-        return path.replace(/\/+/g, '/');
-    }
-
-    async getFileMetadata(path, accessToken) {
-        try {
-            console.log('Getting metadata for path:', path);
             
-            const response = await axios({
-                method: 'post',
-                url: 'https://api.dropboxapi.com/2/files/get_metadata',
-                headers: {
-                    'Authorization': `Bearer ${accessToken}`,
-                    'Content-Type': 'application/json'
-                },
-                data: {
-                    path: path
-                }
-            });
-            return response.data;
-        } catch (error) {
-            console.error('Metadata error:');
-            console.error('Status:', error.response?.status);
-            console.error('Error details:', error.response?.data?.error_summary);
-            throw error;
+            throw new Error(`Failed to fetch file: ${error.message}`);
         }
     }
 }
